@@ -2,7 +2,6 @@ package com.traffic.simulator.engine;
 
 import com.traffic.simulator.entity.PriorityVehicle;
 import com.traffic.simulator.entity.Vehicle;
-import com.traffic.simulator.exception.TrafficJamException;
 import com.traffic.simulator.pattern.factory.VehicleFactory;
 import com.traffic.simulator.pattern.observer.TrafficLight;
 
@@ -16,6 +15,7 @@ public class SimulationEngine {
     private Intersection intersection;
     private TrafficEnvironment environment;
     private VehicleFactory vehicleFactory;
+    private TrafficMonitor monitor;
 
     private ExecutorService vehicleExecutor;
     private ScheduledExecutorService scheduler;
@@ -24,9 +24,6 @@ public class SimulationEngine {
 
     private AtomicInteger totalGenerated = new AtomicInteger(0);
     private AtomicInteger totalPassed = new AtomicInteger(0);
-    private AtomicInteger totalJam = new AtomicInteger(0);
-
-    private static final int JAM_THRESHOLD = 8;
 
     // Constructor: khởi tạo các thành phần chính của hệ thống
     public SimulationEngine(TrafficLight trafficLight, Intersection intersection, TrafficEnvironment environment, VehicleFactory vehicleFactory) {
@@ -36,6 +33,7 @@ public class SimulationEngine {
         this.vehicleFactory = vehicleFactory;
         this.vehicleExecutor = Executors.newFixedThreadPool(10);
         this.scheduler = Executors.newScheduledThreadPool(3);
+        this.monitor = new TrafficMonitor(environment);
     }
 
     // Bắt đầu mô phỏng trong khoảng thời gian (seconds)
@@ -51,6 +49,7 @@ public class SimulationEngine {
         startTrafficLight();     // chạy đèn giao thông
         startGenerateVehicle();  // sinh xe liên tục
         startMonitoring();       // theo dõi hệ thống
+        monitor.start();         // chạy monitor
         // tự động dừng sau thời gian quy định
         scheduler.schedule(() -> stopSimulation(), seconds, TimeUnit.SECONDS);
     }
@@ -62,6 +61,7 @@ public class SimulationEngine {
         System.out.println("Đang tắt hệ thống an toàn...");
         scheduler.shutdown();
         vehicleExecutor.shutdown();
+        monitor.stop();
         try {
             if (!vehicleExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
                 System.out.println("Buộc dừng các luồng xe...");
@@ -87,18 +87,11 @@ public class SimulationEngine {
     private void startGenerateVehicle() {
         scheduler.scheduleAtFixedRate(() -> {
             if (!running.get()) return;
-            try {
-                Vehicle v = vehicleFactory.createRandomVehicle();
-                totalGenerated.incrementAndGet();
-                environment.addVehicle(v);
-                System.out.println("Sinh xe: " + v.getType() + " #" + v.getId());
-                checkJam(); // kiểm tra kẹt xe
-                vehicleExecutor.submit(() -> processVehicle(v));
-
-            } catch (TrafficJamException e) {
-                totalJam.incrementAndGet();
-                System.out.println("Kẹt xe: " + e.getMessage());
-            }
+            Vehicle v = vehicleFactory.createRandomVehicle();
+            totalGenerated.incrementAndGet();
+            environment.addVehicle(v);
+            System.out.println("Sinh xe: " + v.getType() + " #" + v.getId());
+            vehicleExecutor.submit(() -> processVehicle(v));
 
         }, 0, 2, TimeUnit.SECONDS);
     }
@@ -127,6 +120,7 @@ public class SimulationEngine {
                 System.out.println(v.getType() + " #" + v.getId() + " đang qua ngã tư...");
                 Thread.sleep(1000);
                 totalPassed.incrementAndGet();
+                monitor.vehiclePassed(v);
                 environment.removeVehicle(v);
                 intersection.leave(v);
                 System.out.println("Xe " + v.getId() + " đã qua.");
@@ -153,19 +147,11 @@ public class SimulationEngine {
         }
     }
 
-    // Kiểm tra nếu số xe chờ vượt ngưỡng → kẹt xe
-    private void checkJam() throws TrafficJamException {
-        if (environment.getWaitingVehiclesCount() > JAM_THRESHOLD) {
-            throw new TrafficJamException("Hàng chờ vượt quá giới hạn!");
-        }
-    }
-
     // In báo cáo thống kê cuối
     private void printSummary() {
         System.out.println("===== BÁO CÁO =====");
         System.out.println("Tổng xe tạo: " + totalGenerated.get());
         System.out.println("Tổng xe qua: " + totalPassed.get());
-        System.out.println("Số lần kẹt xe: " + totalJam.get());
         System.out.println("===================");
     }
 

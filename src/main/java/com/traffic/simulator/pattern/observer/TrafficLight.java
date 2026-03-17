@@ -1,4 +1,7 @@
+package com.traffic.simulator.pattern.observer;
 
+import com.traffic.simulator.pattern.state.*;
+import com.traffic.simulator.util.LoggerUtil;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 public class TrafficLight implements Subject, Runnable {
@@ -17,6 +20,14 @@ public class TrafficLight implements Subject, Runnable {
     }
 
     public String getState() {
+        return currentState.getName();
+    }
+
+    public void nextState() {
+        currentState.next(this);
+    }
+
+    public String getCurrentStateName() {
         return currentState.getName();
     }
 

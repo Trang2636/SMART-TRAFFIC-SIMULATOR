@@ -1,3 +1,6 @@
+package com.traffic.simulator.pattern.state;
+
+import com.traffic.simulator.pattern.observer.TrafficLight;
 
 public class GreenState implements TrafficLightState {
     @Override
@@ -11,5 +14,9 @@ public class GreenState implements TrafficLightState {
     @Override
     public int getDuration() {
         return 7;
+    }
+    @Override
+    public void next(TrafficLight trafficLight) {
+        trafficLight.setState(new YellowState());
     }
 }
